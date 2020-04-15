@@ -53,7 +53,6 @@ Future enhancements:
 """
 
 import os
-import sys
 import pty
 import re
 import signal
@@ -70,21 +69,11 @@ from mininet.link import Link, Intf, TCIntf, OVSIntf
 from re import findall
 from distutils.version import StrictVersion
 
-# This is for testing. It will later be written based on an environment variable
-# or included in mininet to allow easier importing
-# MININET_LISTENER = os.getenv("MININET_LISTENER")+"/src"
-sys.path.insert(1,"../mininet_listener/src")
-from mininet_listener import  EventHandler, EventListener, MininetEvent
-
 class Node( object ):
     """A virtual network node is simply a shell in a network namespace.
        We communicate with it using pipes."""
 
     portBase = 0  # Nodes always start with eth0/port0, even in OF 1.0
-
-    node_handler = EventHandler()
-    node_listener = EventListener(node_handler, "test.txt")
-
 
     def __init__( self, name, inNamespace=True, **params ):
         """name: name of node
@@ -124,7 +113,6 @@ class Node( object ):
         self.master, self.slave = None, None  # pylint
         self.startShell()
         self.mountPrivateDirs()
-        self.node_handler.create_event(MininetEvent.HOST_CREATED, self)
 
     # File descriptor to node mapping support
     # Class variables and methods

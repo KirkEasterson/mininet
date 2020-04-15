@@ -87,6 +87,7 @@ method may be called to shut down the network.
 """
 
 import os
+import sys
 import re
 import select
 import signal
@@ -107,11 +108,20 @@ from mininet.util import ( quietRun, fixLimits, numCores, ensureRoot,
                            waitListening, BaseString )
 from mininet.term import cleanUpScreens, makeTerms
 
+# This is for testing. It will later be written based on an environment variable
+# or included in mininet to allow easier importing
+# MININET_LISTENER = os.getenv("MININET_LISTENER")+"/src"
+sys.path.insert(1,"../mininet_listener/src")
+from mininet_listener import  EventHandler, EventListener, MininetEvent, MininetCommand
+
 # Mininet version: should be consistent with README and LICENSE
-VERSION = "2.3.0d6"
+VERSION = "2.3.0d7"
 
 class Mininet( object ):
     "Network emulation with hosts spawned in network namespaces."
+
+    node_handler = EventHandler()
+    node_listener = EventListener(node_handler, "test.txt")
 
     def __init__( self, topo=None, switch=OVSKernelSwitch, host=Host,
                   controller=DefaultController, link=Link, intf=Intf,
@@ -170,6 +180,7 @@ class Mininet( object ):
         Mininet.init()  # Initialize Mininet if necessary
 
         self.built = False
+        print "="*25
         if topo and build:
             self.build()
 
@@ -226,6 +237,7 @@ class Mininet( object ):
         h = cls( name, **defaults )
         self.hosts.append( h )
         self.nameToNode[ name ] = h
+        self.node_handler.create_event(MininetEvent.ADD_HOST, h)
         return h
 
     def delNode( self, node, nodes=None):
@@ -240,10 +252,12 @@ class Mininet( object ):
         node.stop( deleteIntfs=True )
         node.terminate()
         nodes.remove( node )
+        self.node_handler.create_event(MininetEvent.DEL_NODE, node)
         del self.nameToNode[ node.name ]
 
     def delHost( self, host ):
         "Delete a host"
+        self.node_handler.create_event(MininetEvent.DEL_HOST, h)
         self.delNode( host, nodes=self.hosts )
 
     def addSwitch( self, name, cls=None, **params ):
@@ -262,10 +276,12 @@ class Mininet( object ):
             self.listenPort += 1
         self.switches.append( sw )
         self.nameToNode[ name ] = sw
+        self.node_handler.create_event(MininetEvent.ADD_SWITCH, sw)
         return sw
 
     def delSwitch( self, switch ):
         "Delete a switch"
+        self.node_handler.create_event(MininetEvent.DEL_SWITCH, sw)
         self.delNode( switch, nodes=self.switches )
 
     def addController( self, name='c0', controller=None, **params ):
@@ -287,12 +303,14 @@ class Mininet( object ):
         if controller_new:  # allow controller-less setups
             self.controllers.append( controller_new )
             self.nameToNode[ name ] = controller_new
+        self.node_handler.create_event(MininetEvent.ADD_CONTROLLER, controller_new)
         return controller_new
 
     def delController( self, controller ):
         """Delete a controller
            Warning - does not reconfigure switches, so they
            may still attempt to connect to it!"""
+        self.node_handler.create_event(MininetEvent.DEL_CONTROLLER, controller_new)
         self.delNode( controller )
 
     def addNAT( self, name='nat0', connect=True, inNamespace=False,
@@ -317,6 +335,7 @@ class Mininet( object ):
             for host in self.hosts:
                 if host.inNamespace:
                     host.setDefaultRoute( 'via %s' % natIP )
+        self.node_handler.create_event(MininetEvent.ADD_NAT, nat)
         return nat
 
     # BL: We now have four ways to look up nodes
@@ -338,6 +357,7 @@ class Mininet( object ):
 
     def __delitem__( self, key ):
         "del net[ name ] operator - delete node with given name"
+        self.node_handler.create_event(MininetEvent.DEL_ITEM, nat)
         self.delNode( self.nameToNode[ key ] )
 
     def __iter__( self ):
@@ -399,10 +419,14 @@ class Mininet( object ):
         cls = self.link if cls is None else cls
         link = cls( node1, node2, **options )
         self.links.append( link )
+        # The below can be uncommented when the create_event method
+        #   properly handles generic events
+        self.node_handler.create_event(MininetEvent.ADD_LINK, link)
         return link
 
     def delLink( self, link ):
         "Remove a link from this network"
+        self.node_handler.create_event(MininetEvent.DEL_LINK, link)
         link.delete()
         self.links.remove( link )
 
@@ -441,6 +465,7 @@ class Mininet( object ):
             # quietRun( 'renice +18 -p ' + repr( host.pid ) )
             # This may not be the right place to do this, but
             # it needs to be done somewhere.
+        self.node_handler.create_command(MininetCommand.CONFIG_HOSTS)
         info( '\n' )
 
     def buildFromTopo( self, topo=None ):
@@ -687,6 +712,7 @@ class Mininet( object ):
         else:
             ploss = 0
             output( "*** Warning: No packets sent\n" )
+        self.node_handler.create_command(MininetCommand.PING)
         return ploss
 
     @staticmethod
@@ -751,28 +777,33 @@ class Mininet( object ):
             output( " %s->%s: %s/%s, " % (src, dest, sent, received ) )
             output( "rtt min/avg/max/mdev %0.3f/%0.3f/%0.3f/%0.3f ms\n" %
                     (rttmin, rttavg, rttmax, rttdev) )
+        self.node_handler.create_command(MininetCommand.PING_FULL)
         return all_outputs
 
     def pingAll( self, timeout=None ):
         """Ping between all hosts.
            returns: ploss packet loss percentage"""
+        self.node_handler.create_command(MininetCommand.PING_ALL)
         return self.ping( timeout=timeout )
 
     def pingPair( self ):
         """Ping between first two hosts, useful for testing.
            returns: ploss packet loss percentage"""
         hosts = [ self.hosts[ 0 ], self.hosts[ 1 ] ]
+        self.node_handler.create_command(MininetCommand.PING_PAIR)
         return self.ping( hosts=hosts )
 
     def pingAllFull( self ):
         """Ping between all hosts.
            returns: ploss packet loss percentage"""
+        self.node_handler.create_command(MininetCommand.PING_ALL_FULL)
         return self.pingFull()
 
     def pingPairFull( self ):
         """Ping between first two hosts, useful for testing.
            returns: ploss packet loss percentage"""
         hosts = [ self.hosts[ 0 ], self.hosts[ 1 ] ]
+        self.node_handler.create_command(MininetCommand.PING_PAIR_FULL)
         return self.pingFull( hosts=hosts )
 
     @staticmethod
