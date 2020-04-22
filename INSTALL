@@ -5,6 +5,14 @@ Mininet Installation/Configuration Notes
 Mininet 2.3.0d6
 ---
 
+NOTE
+---
+This version utilizes a listener for callbacks to generate PTF source
+code for testing purposes. The listener can be found at
+<https://github.com/KirkEasterson/mininet_listener/>. Ensure that these
+two repositories have been cloned into the same directory. From this step
+on, installation can resume as normal.
+
 The supported installation methods for Mininet are 1) using a
 pre-built VM image, and 2) native installation on Ubuntu. You can also
 easily create your own Mininet VM image (4).
