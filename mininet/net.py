@@ -87,6 +87,7 @@ method may be called to shut down the network.
 """
 
 import os
+import sys
 import re
 import select
 import signal
@@ -107,11 +108,20 @@ from mininet.util import ( quietRun, fixLimits, numCores, ensureRoot,
                            waitListening, BaseString )
 from mininet.term import cleanUpScreens, makeTerms
 
+# This is for testing. It will later be written based on an environment variable
+# or included in mininet to allow easier importing
+# MININET_LISTENER = os.getenv("MININET_LISTENER")+"/src"
+sys.path.insert(1,"../mininet_listener/src")
+from mininet_listener import  EventHandler, EventListener
+
 # Mininet version: should be consistent with README and LICENSE
-VERSION = "2.3.0d6"
+VERSION = "2.3.0d7"
 
 class Mininet( object ):
     "Network emulation with hosts spawned in network namespaces."
+
+    node_handler = EventHandler()
+    node_listener = EventListener(node_handler, "test.txt")
 
     def __init__( self, topo=None, switch=OVSKernelSwitch, host=Host,
                   controller=DefaultController, link=Link, intf=Intf,
@@ -226,6 +236,7 @@ class Mininet( object ):
         h = cls( name, **defaults )
         self.hosts.append( h )
         self.nameToNode[ name ] = h
+        self.node_handler.hostAdded(h)
         return h
 
     def delNode( self, node, nodes=None):
@@ -244,6 +255,7 @@ class Mininet( object ):
 
     def delHost( self, host ):
         "Delete a host"
+        self.node_handler.hostDeleted(h)
         self.delNode( host, nodes=self.hosts )
 
     def addSwitch( self, name, cls=None, **params ):
@@ -262,10 +274,12 @@ class Mininet( object ):
             self.listenPort += 1
         self.switches.append( sw )
         self.nameToNode[ name ] = sw
+        self.node_handler.switchAdded(sw)
         return sw
 
     def delSwitch( self, switch ):
         "Delete a switch"
+        self.node_handler.switchDeleted(sw)
         self.delNode( switch, nodes=self.switches )
 
     def addController( self, name='c0', controller=None, **params ):
@@ -287,12 +301,14 @@ class Mininet( object ):
         if controller_new:  # allow controller-less setups
             self.controllers.append( controller_new )
             self.nameToNode[ name ] = controller_new
+        self.node_handler.controllerAdded(controller_new)
         return controller_new
 
     def delController( self, controller ):
         """Delete a controller
            Warning - does not reconfigure switches, so they
            may still attempt to connect to it!"""
+        self.node_handler.controllerDeleted(controller_new)
         self.delNode( controller )
 
     def addNAT( self, name='nat0', connect=True, inNamespace=False,
@@ -317,6 +333,7 @@ class Mininet( object ):
             for host in self.hosts:
                 if host.inNamespace:
                     host.setDefaultRoute( 'via %s' % natIP )
+        self.node_handler.natAdded(nat)
         return nat
 
     # BL: We now have four ways to look up nodes
@@ -338,6 +355,7 @@ class Mininet( object ):
 
     def __delitem__( self, key ):
         "del net[ name ] operator - delete node with given name"
+        self.node_handler.create_event(MininetEvent.DEL_ITEM, nat)
         self.delNode( self.nameToNode[ key ] )
 
     def __iter__( self ):
@@ -399,10 +417,12 @@ class Mininet( object ):
         cls = self.link if cls is None else cls
         link = cls( node1, node2, **options )
         self.links.append( link )
+        self.node_handler.linkAdded(link)
         return link
 
     def delLink( self, link ):
         "Remove a link from this network"
+        self.node_handler.linkDeleted(link)
         link.delete()
         self.links.remove( link )
 
@@ -441,6 +461,7 @@ class Mininet( object ):
             # quietRun( 'renice +18 -p ' + repr( host.pid ) )
             # This may not be the right place to do this, but
             # it needs to be done somewhere.
+        self.node_handler.hostsConfigured(self.hosts)
         info( '\n' )
 
     def buildFromTopo( self, topo=None ):
@@ -580,6 +601,7 @@ class Mininet( object ):
                 sorted( self.switches,
                         key=lambda s: str( type( s ) ) ), type ):
             switches = tuple( switches )
+            switches = tuple( switches )
             if hasattr( swclass, 'batchShutdown' ):
                 success = swclass.batchShutdown( switches )
                 stopped.update( { s: s for s in success } )
@@ -668,6 +690,7 @@ class Mininet( object ):
                         result = node.cmd( 'ping -c1 %s %s' %
                                            (opts, dest.IP()) )
                         sent, received = self._parsePing( result )
+                        self.node_handler.pingSent(node, dest)
                     else:
                         sent, received = 0, 0
                     packets += sent
@@ -687,6 +710,7 @@ class Mininet( object ):
         else:
             ploss = 0
             output( "*** Warning: No packets sent\n" )
+        # self.node_handler.pingSent(ploss)
         return ploss
 
     @staticmethod
@@ -743,6 +767,7 @@ class Mininet( object ):
                     sent, received, rttmin, rttavg, rttmax, rttdev = outputs
                     all_outputs.append( (node, dest, outputs) )
                     output( ( '%s ' % dest.name ) if received else 'X ' )
+                    self.node_handler.pingFullSent(node, dest)
             output( '\n' )
         output( "*** Results: \n" )
         for outputs in all_outputs:
@@ -751,28 +776,33 @@ class Mininet( object ):
             output( " %s->%s: %s/%s, " % (src, dest, sent, received ) )
             output( "rtt min/avg/max/mdev %0.3f/%0.3f/%0.3f/%0.3f ms\n" %
                     (rttmin, rttavg, rttmax, rttdev) )
+        self.node_handler.create_command(MininetCommand.PING_FULL)
         return all_outputs
 
     def pingAll( self, timeout=None ):
         """Ping between all hosts.
            returns: ploss packet loss percentage"""
+        self.node_handler.pingAllSent(timeout)
         return self.ping( timeout=timeout )
 
     def pingPair( self ):
         """Ping between first two hosts, useful for testing.
            returns: ploss packet loss percentage"""
         hosts = [ self.hosts[ 0 ], self.hosts[ 1 ] ]
+        self.node_handler.pingPairSent(hosts)
         return self.ping( hosts=hosts )
 
     def pingAllFull( self ):
         """Ping between all hosts.
            returns: ploss packet loss percentage"""
+        self.node_handler.pingAllFullSent()
         return self.pingFull()
 
     def pingPairFull( self ):
         """Ping between first two hosts, useful for testing.
            returns: ploss packet loss percentage"""
         hosts = [ self.hosts[ 0 ], self.hosts[ 1 ] ]
+        self.node_handler.pingPairFullSent(hosts)
         return self.pingFull( hosts=hosts )
 
     @staticmethod
