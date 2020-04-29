@@ -577,6 +577,7 @@ class Mininet( object ):
                 success = swclass.batchStartup( switches )
                 started.update( { s: s for s in success } )
         info( '\n' )
+        self.node_handler.sessionStarted()
         if self.waitConn:
             self.waitConnected()
 
@@ -615,6 +616,7 @@ class Mininet( object ):
         for host in self.hosts:
             info( host.name + ' ' )
             host.terminate()
+        self.node_handler.sessionStarted()
         info( '\n*** Done\n' )
 
     def run( self, test, *args, **kwargs ):
