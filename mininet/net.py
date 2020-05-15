@@ -108,10 +108,9 @@ from mininet.util import ( quietRun, fixLimits, numCores, ensureRoot,
                            waitListening, BaseString )
 from mininet.term import cleanUpScreens, makeTerms
 
-# This is for testing. It will later be written based on an environment variable
-# or included in mininet to allow easier importing
-# MININET_LISTENER = os.getenv("MININET_LISTENER")+"/src"
-sys.path.insert(1,"../mininet_listener/src")
+mininet_path = os.environ.get("MININET_LISTENER", "../mininet_listener/")
+src_path = mininet_path+"src/"
+sys.path.insert(1,src_path)
 from mininet_listener import  EventHandler, EventListener
 
 # Mininet version: should be consistent with README and LICENSE
