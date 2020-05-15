@@ -616,7 +616,7 @@ class Mininet( object ):
         for host in self.hosts:
             info( host.name + ' ' )
             host.terminate()
-        self.node_handler.sessionStarted()
+        self.node_handler.sessionStopped()
         info( '\n*** Done\n' )
 
     def run( self, test, *args, **kwargs ):
