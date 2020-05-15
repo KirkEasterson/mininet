@@ -120,7 +120,7 @@ class Mininet( object ):
     "Network emulation with hosts spawned in network namespaces."
 
     node_handler = EventHandler()
-    node_listener = EventListener(node_handler, "test.txt")
+    node_listener = EventListener(node_handler)
 
     def __init__( self, topo=None, switch=OVSKernelSwitch, host=Host,
                   controller=DefaultController, link=Link, intf=Intf,
