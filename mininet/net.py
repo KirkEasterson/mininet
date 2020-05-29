@@ -711,7 +711,6 @@ class Mininet( object ):
         else:
             ploss = 0
             output( "*** Warning: No packets sent\n" )
-        # self.node_handler.pingSent(ploss)
         return ploss
 
     @staticmethod
